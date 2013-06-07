@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ftp="http://www.mulesoft.org/schema/mule/ftp" xmlns:email="http://www.mulesoft.org/schema/mule/email"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:mulexml="http://www.mulesoft.org/schema/mule/xml"
+	xmlns:smtp="http://www.mulesoft.org/schema/mule/smtp"
+	xmlns:jdbc="http://www.mulesoft.org/schema/mule/jdbc"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:spring="http://www.springframework.org/schema/beans" version="CE-3.3.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/xml http://www.mulesoft.org/schema/mule/xml/current/mule-xml.xsd 
+http://www.mulesoft.org/schema/mule/ftp http://www.mulesoft.org/schema/mule/ftp/current/mule-ftp.xsd 
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd 
+http://www.mulesoft.org/schema/mule/smtp http://www.mulesoft.org/schema/mule/smtp/current/mule-smtp.xsd 
+http://www.mulesoft.org/schema/mule/jdbc http://www.mulesoft.org/schema/mule/jdbc/current/mule-jdbc.xsd 
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd 
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd 
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd 
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd ">
+    <ftp:connector name="FTP" pollingFrequency="1000" streaming="true" validateConnections="true" doc:name="FTP"> 
+        <service-overrides sessionHandler="org.mule.session.NullSessionHandler"></service-overrides>  
+    </ftp:connector>
+    <ftp:endpoint name="FTPopta" host="dgdrop.espn.com" port="21" responseTimeout="10000" password="m4k3c4LL" path="/to_espn/test/OPTA" user="opta" doc:name="FTP" connector-ref="FTP"></ftp:endpoint>
+    <ftp:endpoint name="FTPfbk" host="dgdrop.espn.com" port="21" responseTimeout="10000" password="m4k3c4LL" path="/to_espn/test/FBK" user="opta" doc:name="FTP" connector-ref="FTP"></ftp:endpoint>
+    <file:endpoint name="OUTopta" path="C:\ESBAppications\MuleStudio\examples\CricketInboundFeed\OutOptXML" outputPattern="#[function:datestamp]-#[header:originalFilename]" responseTimeout="10000" doc:name="File"></file:endpoint>
+    <file:endpoint name="OUTfbk" path="C:\ESBAppications\MuleStudio\examples\CricketInboundFeed\OutFbkXML" outputPattern="#[function:datestamp]-#[header:originalFilename]" responseTimeout="10000" doc:name="File"></file:endpoint>
+    <file:endpoint name="OUTmisc" path="C:\ESBAppications\MuleStudio\examples\CricketInboundFeed\OutMisXML" outputPattern="#[function:datestamp]-#[header:originalFilename]" responseTimeout="10000" doc:name="File"></file:endpoint>
+    <file:endpoint name="OUTLog" path="C:\ESBAppications\MuleStudio\examples\CricketInboundFeed\Log" outputPattern="Logger.txt" responseTimeout="10000" doc:name="File"></file:endpoint>
+    <file:connector name="FileCon" autoDelete="false" outputAppend="true" streaming="true" validateConnections="true" doc:name="File"></file:connector>
+    <jdbc:oracle-data-source name="Oracle_Data_Source" user="cricket" password="cricket" url="jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=aether)(PORT=8605))(ADDRESS=(PROTOCOL=TCP)(HOST=hemera)(PORT=8605)))(CONNECT_DATA=(SERVICE_NAME=SDRNET)(SERVER=DEDICATED)))" transactionIsolation="UNSPECIFIED" doc:name="Oracle Data Source"></jdbc:oracle-data-source>
+    <jdbc:connector name="Database_Connector" dataSource-ref="Oracle_Data_Source" validateConnections="true" queryTimeout="-1" pollingFrequency="0" doc:name="Database"> 
+        <jdbc:query key="InsertQuery" value="CALL MESSAGE_PKG.InsertMessage(#[flowVars['providerID']], #[flowVars['fileName']],#[flowVars['fileType']],#[flowVars['fileContent']])"></jdbc:query>  
+    </jdbc:connector>
+    <smtp:gmail-connector name="emailConnector" doc:name="Gmail"></smtp:gmail-connector>
+    <smtp:endpoint name="SMTP" user="silentdina%40gmail.com" password="rubjohn0609" from="silentdina@gmail.com" subject="Exception Mail" to="Joseph.X.Chelliah.-ND@espn.com" host="smtp.gmail.com" port="587" doc:name="SMTP" connector-ref="emailConnector"></smtp:endpoint>
+    <global-property name="SCContent" value="empty" doc:name="Global Property"></global-property>
+    <global-property name="BBBContent" value="empty" doc:name="Global Property"></global-property>
+    <global-property name="SCContentFBK" value="empty" doc:name="Global Property"></global-property>
+    <global-property name="BBBContentFBK" value="empty" doc:name="Global Property"></global-property>
+    <flow name="OptaFeedFlow" doc:name="OptaFeedFlow"> 
+        <ftp:inbound-endpoint ref="FTPopta" doc:name="FTPinOPTA"> 
+            <file:filename-wildcard-filter pattern="*.xml"></file:filename-wildcard-filter>  
+        </ftp:inbound-endpoint>  
+        <set-variable variableName="fileName" value="#[header:originalFilename]" doc:name="Set File Name"></set-variable>  
+        <set-variable variableName="providerID" value="15" doc:name="Set ProviderID"></set-variable>  
+        <choice doc:name="Choice"> 
+            <when expression="#[flowVars['fileName'].contains('crml')]"> 
+                <processor-chain> 
+                    <set-variable variableName="fileType" value="ScoreCard" doc:name="Set ScoreCard Type"></set-variable>  
+                    <mulexml:xslt-transformer maxIdleTransformers="2" maxActiveTransformers="5" xsl-file="C:\ESBAppications\MuleStudio\examples\CricketInboundFeed\XSL\OPTAFBK_ScoreCard.xsl" doc:name="XSLT_SC"></mulexml:xslt-transformer>  
+                </processor-chain>  
+            </when>  
+            <when expression="#[flowVars['fileName'].contains('C50')]"> 
+                <processor-chain> 
+                    <set-variable variableName="fileType" value="BallbyBall" doc:name="Set BallByBall Type"></set-variable>  
+                    <mulexml:xslt-transformer maxIdleTransformers="2" maxActiveTransformers="5" xsl-file="C:\ESBAppications\MuleStudio\examples\CricketInboundFeed\XSL\BBB.xsl" doc:name="XSLT_BBB"></mulexml:xslt-transformer>  
+                </processor-chain>  
+            </when>  
+            <when expression="#[flowVars['fileName'].contains('C11')]"> 
+                <processor-chain> 
+                    <set-variable variableName="fileType" value="Tables" doc:name="Set Tables Type"></set-variable>  
+                </processor-chain>  
+            </when>  
+            <when expression="#[flowVars['fileName'].contains('fixtures')]"> 
+                <processor-chain> 
+                    <set-variable variableName="fileType" value="Fixtures" doc:name="Set Fixtures Type"></set-variable>  
+                </processor-chain>  
+            </when>  
+            <when expression="#[flowVars['fileName'].contains('manhattenfeed')]"> 
+                <processor-chain> 
+                    <set-variable variableName="fileType" value="Graphics" doc:name="Set Graphics Type"></set-variable>  
+                </processor-chain>  
+            </when>  
+            <otherwise> 
+                <set-variable variableName="fileType" value="Other File" doc:name="Set Other Type"></set-variable>  
+            </otherwise>  
+        </choice>  
+        <byte-array-to-string-transformer doc:name="Transform-to-String"></byte-array-to-string-transformer>  
+        <set-variable variableName="fileContent" value="#[message.payload]" doc:name="Set File Content"></set-variable>  
+        <file:outbound-endpoint ref="OUTopta" doc:name="File"></file:outbound-endpoint>  
+        <choice doc:name="Choice"> 
+            <when expression="#[flowVars['fileType'] == 'Other File']"> 
+                <logger level="INFO" doc:name="Logger" message="File #[flowVars['fileName']] - Cannot be Processed"></logger>  
+            </when>  
+            <otherwise> 
+                <choice doc:name="Choice"> 
+                    <when expression="(flowVars.fileContent == app.registry.SCContent) || (flowVars.fileContent == app.registry.BBBContent)"> 
+                        <logger level="INFO" doc:name="Logger" message="File #[flowVars['fileName']] - is Duplicated - OPTA"></logger>  
+                    </when>  
+                    <otherwise> 
+                        <processor-chain> 
+                            <jdbc:outbound-endpoint exchange-pattern="one-way" queryKey="InsertQuery" connector-ref="Database_Connector" doc:name="Database"></jdbc:outbound-endpoint>  
+                        </processor-chain>  
+                    </otherwise>  
+                </choice>  
+            </otherwise>  
+        </choice>  
+        <choice doc:name="Choice"> 
+            <when expression="#[flowVars['fileType'] == 'ScoreCard']"> 
+                <processor-chain> 
+                    <expression-component doc:name="set Opta SC content">app.registry.SCContent= flowVars.fileContent</expression-component>  
+                </processor-chain>  
+            </when>  
+            <when expression="#[flowVars['fileType'] == 'BallbyBall']"> 
+                <processor-chain> 
+                    <expression-component doc:name="set Opta BBB content">app.registry.BBBContent= flowVars.fileContent</expression-component>  
+                </processor-chain>  
+            </when>  
+            <when expression="#[flowVars['fileType'] == 'Other File']"> 
+                <processor-chain> 
+                    <set-payload value="#[function:datestamp] : Invalid FileType - OPTA, File: #[flowVars['fileName']]. #[System.getProperty('line.separator')]" doc:name="Set Message"></set-payload>  
+                    <file:outbound-endpoint ref="OUTLog" connector-ref="FileCon" doc:name="File"></file:outbound-endpoint>  
+                </processor-chain>  
+            </when>  
+            <otherwise> 
+                <processor-chain> 
+                    <set-payload value="#[function:datestamp] : The FileType #[flowVars['fileType']] is getting processed. #[System.getProperty('line.separator')]" doc:name="Set Message"></set-payload>  
+                    <file:outbound-endpoint ref="OUTLog" connector-ref="FileCon" doc:name="File"></file:outbound-endpoint>  
+                </processor-chain>  
+            </otherwise>  
+        </choice>  
+        <catch-exception-strategy doc:name="Catch OptaFlow Exception Strategy"> 
+            <set-payload value="The File #[flowVars['fileName']] has failed to process - OPTA" doc:name="Set Message"></set-payload>  
+            <smtp:outbound-endpoint ref="SMTP" doc:name="Send notification email"> 
+                <email:string-to-email-transformer></email:string-to-email-transformer>  
+            </smtp:outbound-endpoint>  
+        </catch-exception-strategy>  
+    </flow>
+    <flow name="FBKFeedFlow" doc:name="FBKFeedFlow"> 
+        <ftp:inbound-endpoint ref="FTPfbk" doc:name="FTPinFBK"> 
+            <file:filename-wildcard-filter pattern="*.xml"></file:filename-wildcard-filter>  
+        </ftp:inbound-endpoint>  
+        <set-variable variableName="fileName" value="#[header:originalFilename]" doc:name="Set File Name"></set-variable>  
+        <set-variable variableName="providerID" value="81" doc:name="Set ProviderID"></set-variable>  
+        <choice doc:name="Choice"> 
+            <when expression="#[flowVars['fileName'].contains('scorecardxml')]"> 
+                <processor-chain> 
+                    <set-variable variableName="fileType" value="ScoreCard" doc:name="Set ScoreCard Type"></set-variable>  
+                </processor-chain>  
+            </when>  
+            <when expression="#[flowVars['fileName'].contains('ballbyballxml')]"> 
+                <processor-chain> 
+                    <set-variable variableName="fileType" value="BallbyBall" doc:name="Set BallByBall Type"></set-variable>  
+                </processor-chain>  
+            </when>  
+            <otherwise> 
+                <processor-chain> 
+                    <set-variable variableName="fileType" value="Other File" doc:name="Set Other Type"></set-variable>  
+                </processor-chain>  
+            </otherwise>  
+        </choice>  
+        <byte-array-to-string-transformer doc:name="Transform-to-String"></byte-array-to-string-transformer>  
+        <set-variable variableName="fileContent" value="#[message.payload]" doc:name="Set File Content"></set-variable>  
+        <file:outbound-endpoint ref="OUTfbk" doc:name="File"></file:outbound-endpoint>  
+        <choice doc:name="Choice"> 
+            <when expression="#[flowVars['fileType'] == 'Other File']"> 
+                <logger level="INFO" doc:name="Logger" message="File #[flowVars['fileName']] - Cannot be Processed"></logger>  
+            </when>  
+            <otherwise> 
+                <choice doc:name="Choice"> 
+                    <when expression="(flowVars.fileContent == app.registry.SCContentFBK) || (flowVars.fileContent == app.registry.BBBContentFBK)"> 
+                        <logger level="INFO" doc:name="Logger" message="File #[flowVars['fileName']] - is Duplicated - FBK"></logger>  
+                    </when>  
+                    <otherwise> 
+                        <processor-chain> 
+                            <jdbc:outbound-endpoint exchange-pattern="one-way" queryKey="InsertQuery" connector-ref="Database_Connector" doc:name="Database"></jdbc:outbound-endpoint>  
+                        </processor-chain>  
+                    </otherwise>  
+                </choice>  
+            </otherwise>  
+        </choice>  
+        <choice doc:name="Choice"> 
+            <when expression="#[flowVars['fileType'] == 'ScoreCard']"> 
+                <processor-chain> 
+                    <expression-component doc:name="set FBK SC content">app.registry.SCContentFBK = flowVars.fileContent</expression-component>  
+                </processor-chain>  
+            </when>  
+            <when expression="#[flowVars['fileType'] == 'BallbyBall']"> 
+                <processor-chain> 
+                    <expression-component doc:name="set FBK BBB content">app.registry.BBBContentFBK = flowVars.fileContent</expression-component>  
+                </processor-chain>  
+            </when>  
+            <otherwise> 
+                <processor-chain> 
+                    <set-payload value="#[function:datestamp] : Invalid File Type - FBK , File: #[flowVars['fileName']]. #[System.getProperty('line.separator')]" doc:name="Set Message"></set-payload>  
+                    <file:outbound-endpoint ref="OUTLog" connector-ref="FileCon" doc:name="File"></file:outbound-endpoint>  
+                </processor-chain>  
+            </otherwise>  
+        </choice>  
+        <catch-exception-strategy doc:name="Catch FBKFlow Exception Strategy"> 
+            <set-payload value="The File #[flowVars['fileName'] has failed to process - FBK" doc:name="Set Message"></set-payload>  
+            <smtp:outbound-endpoint ref="SMTP" doc:name="Send notification email"> 
+                <email:string-to-email-transformer></email:string-to-email-transformer>  
+            </smtp:outbound-endpoint>  
+        </catch-exception-strategy>  
+    </flow>
+   
+</mule>
